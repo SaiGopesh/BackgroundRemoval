@@ -1,46 +1,61 @@
 import streamlit as st
-from rembg import remove
+from roboflow import Roboflow
 from PIL import Image
-from io import BytesIO
-import base64
+import requests
+import io
 
-st.set_page_config(layout="wide", page_title="Image Background Remover")
+# Set page config
+st.set_page_config(layout="wide", page_title="Animal Classification")
 
-st.write("## Remove background from your image")
+st.write("## Classify your animal image")
 st.write(
-    ":dog: Try uploading an image to watch the background magically removed. Full quality images can be downloaded from the sidebar. This code is open source and available [here](https://github.com/tyler-simons/BackgroundRemoval) on GitHub. Special thanks to the [rembg library](https://github.com/danielgatis/rembg) :grin:"
+    "Upload an image to classify the animal in it using a pre-trained model from Roboflow. The model is trained on a variety of animals and will predict the class of the animal. :elephant: :lion: :dog: :cat:"
 )
-st.sidebar.write("## Upload and download :gear:")
+st.sidebar.write("## Upload your image :gear:")
 
+# Maximum file size for upload
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
-# Download the fixed image
-def convert_image(img):
-    buf = BytesIO()
-    img.save(buf, format="PNG")
-    byte_im = buf.getvalue()
-    return byte_im
+# Roboflow API configuration (replace with your Roboflow API key and project details)
+rf = Roboflow(api_key="YjMxjvei1qSX2MwmTqkv")  # Replace with your API key
+project = rf.workspace("ttu-py3sj").project("animal-classification-rextd")
+model = project.version(1).model  # Load the model
 
-
-def fix_image(upload):
+# Function to predict the animal using Roboflow API
+def classify_animal(upload):
     image = Image.open(upload)
-    col1.write("Original Image :camera:")
-    col1.image(image)
+    
+    # Display the uploaded image
+    st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    fixed = remove(image)
-    col2.write("Fixed Image :wrench:")
-    col2.image(fixed)
+    # Convert image to byte array for Roboflow API
+    byte_arr = io.BytesIO()
+    image.save(byte_arr, format="PNG")
+    byte_arr = byte_arr.getvalue()
+
+    # Send the image to the Roboflow API for prediction
+    response = model.predict(byte_arr, confidence=40, overlap=30).json()
+
+    # Display the prediction results
+    if response['predictions']:
+        prediction = response['predictions'][0]  # Get the top prediction
+        predicted_class = prediction['class']
+        confidence = prediction['confidence']
+        
+        st.write(f"Prediction: {predicted_class} with confidence: {confidence*100:.2f}%")
+    else:
+        st.write("No prediction could be made. Please try again.")
+
     st.sidebar.markdown("\n")
-    st.sidebar.download_button("Download fixed image", convert_image(fixed), "fixed.png", "image/png")
+    st.sidebar.download_button("Download the image", upload, "image.png", "image/png")
 
+# Upload the image
+uploaded_file = st.sidebar.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
 
-col1, col2 = st.columns(2)
-my_upload = st.sidebar.file_uploader("Upload an image", type=["png", "jpg", "jpeg"])
-
-if my_upload is not None:
-    if my_upload.size > MAX_FILE_SIZE:
+if uploaded_file is not None:
+    if uploaded_file.size > MAX_FILE_SIZE:
         st.error("The uploaded file is too large. Please upload an image smaller than 5MB.")
     else:
-        fix_image(upload=my_upload)
+        classify_animal(upload=uploaded_file)
 else:
-    fix_image("./zebra.jpg")
+    st.write("Please upload an image to classify.")
